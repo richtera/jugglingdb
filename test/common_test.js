@@ -33,15 +33,19 @@ Object.keys(schemas).forEach(function (schemaName) {
     if (process.env.ONLY && process.env.ONLY !== schemaName) return;
     if (process.env.EXCEPT && ~process.env.EXCEPT.indexOf(schemaName)) return;
     performTestFor(schemaName);
+    Schema.mongooseMode = true;
+    performTestFor(schemaName);
 });
 
 if (process.env.ONLY && !testPerformed) {
+    performTestFor(process.env.ONLY);
+    Schema.mongooseMode = true;
     performTestFor(process.env.ONLY);
 }
 
 function performTestFor(schemaName) {
     testPerformed = true;
-    context(schemaName, function () {
+    context(schemaName + (Schema.mongooseMode ? " - mongoodeMode" : ""), function () {
         var schema = new Schema(schemaName, schemas[schemaName] || {});
 
         it('should connect to database', function (test) {
@@ -67,7 +71,7 @@ function testOrm(schema) {
 
     it('should define class', function (test) {
 
-        User = schema.define('User', {
+        User = schema.define('User' + (Schema.mongooseMode ? '_MM' : ''), {
             name:      { type: String, index: true },
             email:     { type: String, index: true },
             bio:          Text,
@@ -79,7 +83,7 @@ function testOrm(schema) {
             extra:      Object
         });
 
-        Post = schema.define('Post', {
+        Post = schema.define('Post' + (Schema.mongooseMode ? '_MM' : ''), {
             title:     { type: String, length: 255, index: true },
             subject:   { type: String },
             content:   { type: Text },
@@ -195,7 +199,7 @@ function testOrm(schema) {
         setTimeout(delayedCallback, 100);
 
         function delayedCallback() {
-            Post.all({where: {title: uniqueTitle}}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {title: uniqueTitle}} : {where: {title: uniqueTitle}}, function (err, posts) {
                 test.equal(posts.length, 1);
                 test.done();
             });
@@ -396,7 +400,7 @@ function testOrm(schema) {
         var wait = 1;
 
         // exact match with string
-        Post.all({where: {title: 'New title'}}, function (err, res) {
+        Post.all(Schema.mongooseMode ? {$where: {title: 'New title'}} : {where: { title: 'New Title'}}, function (err, res) {
             var pass = true;
             res.forEach(function (r) {
                 if (r.title != 'New title') pass = false;
@@ -407,7 +411,7 @@ function testOrm(schema) {
         });
 
         // matching null
-        // Post.all({where: {title: null}}, function (err, res) {
+        // Post.all(Schema.mongooseMode ? {$where: {title:null}} : {where: {title: null}}, function (err, res) {
 
         //     var pass = true;
         //     res.forEach(function (r) {
@@ -429,7 +433,7 @@ function testOrm(schema) {
 
     it('should find records filtered with multiple attributes', function (test) {
         Post.create({title: 'title', content: 'content', published: true, date: 1}, function (err, post) {
-            Post.all({where: {title: 'title', date: 1}}, function (err, res) {
+            Post.all(Schema.mongooseMode ? {$where: {title: 'title', date: 1}} : {where: {title: 'title', date: 1}}, function (err, res) {
                 test.ok(res.length > 0, 'Exact match with string returns dataset');
                 test.done();
             });
@@ -472,7 +476,7 @@ function testOrm(schema) {
                 if (post.userId !== null) {
                     // We could get the user with belongs to relationship but it is better if there is no interactions.
                     User.find(post.userId, function(err, user) {
-                        user.posts({where: {id: post.id}}, function(err, posts) {
+                        user.posts(Schema.mongooseMode ? {$where: {id: post.id}} : {where: {id: post.id}}, function(err, posts) {
                             test.equal(posts.length, 1, 'There should be only 1 post.');
                             test.done();
                         });
@@ -515,7 +519,7 @@ function testOrm(schema) {
                                         if (schema.name === 'mongodb') { // for the moment mongodb doesn\'t support additional conditions on hasMany relations (see above)
                                             test.done();
                                         } else {
-                                            user.posts({where: {id: data[0].id}}, function(err, data) {
+                                            user.posts(Schema.mongooseMode ? {$where: {id: data[0].id}} : {where: {id: data[0].id}}, function(err, data) {
                                                 test.equal(data.length, 1, 'There should be only one post.');
                                                 requestsAreCounted && test.equal(nbInitialRequests + 1, nbSchemaRequests, 'There should be one additional request since we added conditions.');
 
@@ -567,7 +571,7 @@ function testOrm(schema) {
         var wait = 2;
 
         test.ok(Post.scope, 'Scope supported');
-        Post.scope('published', {where: {published: true}});
+        Post.scope('published', Schema.mongooseMode ? {$where: {published: true }}: {where: {published: true}});
         test.ok(typeof Post.published === 'function');
         test.ok(Post.published._scope.where.published === true);
         var post = Post.published.build();
@@ -665,7 +669,7 @@ function testOrm(schema) {
 
         function doStringTest() {
             tests += 1;
-            Post.all({order: 'title'}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$order: 'title'} : {order: 'title'}, function (err, posts) {
                 if (err) console.log(err);
                 test.equal(posts.length, 6);
                 titles.sort(compare).forEach(function (t, i) {
@@ -677,7 +681,7 @@ function testOrm(schema) {
 
         function doNumberTest() {
             tests += 1;
-            Post.all({order: 'date'}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$order: 'date'} : {order: 'date'}, function (err, posts) {
                 if (err) console.log(err);
                 test.equal(posts.length, 6);
                 dates.sort(numerically).forEach(function (d, i) {
@@ -690,7 +694,7 @@ function testOrm(schema) {
 
         function doFilterAndSortTest() {
             tests += 1;
-            Post.all({where: {date: new Date(1000 * 9)}, order: 'title', limit: 3}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: new Date(1000 * 9)}, $order: 'title', limit: 3} : {where: {date: new Date(1000 * 9)}, order: 'title', limit: 3}, function (err, posts) {
                 if (err) console.log(err);
                 console.log(posts.length);
                 test.equal(posts.length, 2, 'Exactly 2 posts returned by query');
@@ -705,7 +709,7 @@ function testOrm(schema) {
 
         function doFilterAndSortReverseTest() {
             tests += 1;
-            Post.all({where: {date: new Date(1000 * 9)}, order: 'title DESC', limit: 3}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: new Date(1000 * 9)}, $order: 'title DESC', limit: 3} : {where: {date: new Date(1000 * 9)}, order: 'title DESC', limit: 3}, function (err, posts) {
                 if (err) console.log(err);
                 test.equal(posts.length, 2, 'Exactly 2 posts returned by query');
                 [ 'Title Z', 'Title C' ].forEach(function (t, i) {
@@ -719,7 +723,7 @@ function testOrm(schema) {
 
         function doMultipleSortTest() {
             tests += 1;
-            Post.all({order: "title ASC, subject ASC"}, function(err, posts) {
+            Post.all(Schema.mongooseMode ? {$order: "title ASC, subject ASC"} : {order: "title ASC, subject ASC"}, function(err, posts) {
                 if (err) console.log(err);
                 test.equal(posts.length, 6);
                 test.equal(posts[0].title, "Title A");
@@ -733,7 +737,7 @@ function testOrm(schema) {
 
         function doMultipleReverseSortTest() {
             tests += 1;
-            Post.all({order: "title ASC, subject DESC"}, function(err, posts) {
+            Post.all(Schema.mongooseMode ? {$order: "title ASC, subject DESC"} : {order: "title ASC, subject DESC"}, function(err, posts) {
                 if (err) console.log(err);
                 test.equal(posts.length, 6);
                 test.equal(posts[0].title, "Title A");
@@ -787,31 +791,31 @@ function testOrm(schema) {
 
         function makeTest() {
             // gt
-            Post.all({where: {date: {gt: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: {gt: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}} : {where: {date: {gt: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
                 test.equal(posts.length, 2, 'gt');
                 ok();
             });
 
             // gte
-            Post.all({where: {date: {gte: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: {gte: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}} : {where: {date: {gte: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
                 test.equal(posts.length, 3, 'gte');
                 ok();
             });
 
             // lte
-            Post.all({where: {date: {lte: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: {lte: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}} : {where: {date: {lte: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
                 test.equal(posts.length, 7, 'lte');
                 ok();
             });
 
             // lt
-            Post.all({where: {date: {lt: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: {lt: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}} : {where: {date: {lt: new Date('Tue, 07 Feb 2012 13:56:12 GMT')}}}, function (err, posts) {
                 test.equal(posts.length, 6, 'lt');
                 ok();
             });
 
             // between
-            Post.all({where: {date: {between: [new Date('Tue, 05 Feb 2012 13:56:12 GMT'), new Date('Tue, 09 Feb 2012 13:56:12 GMT')]}}}, function (err, posts) {
+            Post.all(Schema.mongooseMode ? {$where: {date: {between: [new Date('Tue, 05 Feb 2012 13:56:12 GMT'), new Date('Tue, 09 Feb 2012 13:56:12 GMT')]}}} : {where: {date: {between: [new Date('Tue, 05 Feb 2012 13:56:12 GMT'), new Date('Tue, 09 Feb 2012 13:56:12 GMT')]}}}, function (err, posts) {
                 test.equal(posts.length, 5, 'between');
                 ok();
             });
@@ -844,50 +848,50 @@ function testOrm(schema) {
 
         function makeTest() {
             // IN with empty array should return nothing
-            User.all({where: {name: {inq: []}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {name: {inq: []}}} : {where: {name: {inq: []}}}, function (err, users) {
                 test.equal(users.length, 0, 'IN with empty array returns nothing');
                 ok();
             });
 
             // NOT IN with empty array should return everything
-            User.all({where: {name: {nin: []}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {name: {nin: []}}} : {where: {name: {nin: []}}}, function (err, users) {
                 test.equal(users.length, 5, 'NOT IN with empty array returns everything');
                 ok();
             });
 
             // IN [User A] returns user with name = User A
-            User.all({where: {name: {inq: ['User A']}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {name: {inq: ['User A']}}} : {where: {name: {inq: ['User A']}}}, function (err, users) {
                 test.equal(users.length, 1, 'IN searching one existing value returns 1 user');
                 test.equal(users[0].name, 'User A', 'IN [User A] returns user with name = User A');
                 ok();
             });
 
             // NOT IN [User A] returns users with name != User A
-            User.all({where: {name: {nin: ['User A']}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {name: {nin: ['User A']}}} : {where: {name: {nin: ['User A']}}}, function (err, users) {
                 test.equal(users.length, 4, 'IN [User A] returns users with name != User A');
                 ok();
             });
 
             // IN [User A, User B] returns users with name = User A OR name = User B
-            User.all({where: {name: {inq: ['User A', 'User B']}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {name: {inq: ['User A', 'User B']}}} : {where: {name: {inq: ['User A', 'User B']}}}, function (err, users) {
                 test.equal(users.length, 2, 'IN searching two existing values returns 2 users');
                 ok();
             });
 
             // NOT IN [User A, User B] returns users with name != User A AND name != User B
-            User.all({where: {name: {nin: ['User A', 'User B']}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {name: {nin: ['User A', 'User B']}}} : {where: {name: {nin: ['User A', 'User B']}}}, function (err, users) {
                 test.equal(users.length, 3, 'NOT IN searching two existing values returns users with name != User A AND name != User B');
                 ok();
             });
 
             // IN works with numbers too
-            User.all({where: {age: {inq: [21, 22]}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {age: {inq: [21, 22]}}} : {where: {age: {inq: [21, 22]}}}, function (err, users) {
                 test.equal(users.length, 2, 'IN works with numbers too');
                 ok();
             });
 
             // NOT IN works with numbers too
-            User.all({where: {age: {nin: [21, 22]}}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$where: {age: {nin: [21, 22]}}} : {where: {age: {nin: [21, 22]}}}, function (err, users) {
                 test.equal(users.length, 3, 'NOT IN works with numbers too');
                 ok();
             });
@@ -927,7 +931,7 @@ function testOrm(schema) {
         }
 
         function doSortTest() {
-            User.all({order: 'email ASC', where: {name: 'Nick'}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$order: 'email ASC', $where: {name: 'Nick'}} : {order: 'email ASC', where: {name: 'Nick'}}, function (err, users) {
                 var _emails = emails.sort();
                 users.forEach(function (user, i) {
                     test.equal(_emails[i], user.email, 'ASC sorting');
@@ -937,7 +941,7 @@ function testOrm(schema) {
         }
 
         function doReverseSortTest() {
-            User.all({order: 'email DESC', where: {name: 'Nick'}}, function (err, users) {
+            User.all(Schema.mongooseMode ? {$order: 'email DESC', $where: {name: 'Nick'}} : {order: 'email DESC', where: {name: 'Nick'}}, function (err, users) {
                 var _emails = emails.sort().reverse();
                 users.forEach(function (user, i) {
                     test.equal(_emails[i], user.email, 'DESC sorting');
@@ -979,14 +983,14 @@ function testOrm(schema) {
         test.expect(4);
         Post.findOne(function (err, post) {
             test.ok(post && post.id);
-            Post.findOne({ where: { title: 'hey' } }, function (err, post) {
+            Post.findOne(Schema.mongooseMode ? { $where: { title: 'hey' } } : { where: { title: 'hey' } }, function (err, post) {
                 if (err) {
                     console.log(err);
                     return test.done();
                 }
-                test.equal(post && post.constructor.modelName, 'Post');
+                test.equal(post && post.constructor.modelName, 'Post' + (Schema.mongooseMode ? '_MM' : ''));
                 test.equal(post && post.title, 'hey');
-                Post.findOne({ where: { title: 'not exists' } }, function (err, post) {
+                Post.findOne(Schema.mongooseMode ? { $where: { title: 'not exists' } } : { where: { title: 'not exists' } }, function (err, post) {
                     test.ok(typeof post === 'undefined');
                     test.done();
                 });
@@ -1082,7 +1086,7 @@ function testOrm(schema) {
     });
 
     it('should work with custom setters and getters', function (test) {
-        User.schema.defineForeignKey('User', 'passwd');
+        User.schema.defineForeignKey('User' + (Schema.mongooseMode ? '_MM' : ''), 'passwd');
         User.setter.passwd = function (pass) {
             this._passwd = pass + 'salt';
         };
@@ -1092,7 +1096,7 @@ function testOrm(schema) {
             User.find(user.id, function (err, user) {
                 test.ok(user !== u);
                 test.equal(user.passwd, 'qwertysalt');
-                User.all({where: {passwd: 'qwertysalt'}}, function (err, users) {
+                User.all(Schema.mongooseMode ? {$where: {passwd: 'qwertysalt'}} : {where: {passwd: 'qwertysalt'}}, function (err, users) {
                     test.ok(users[0] !== user);
                     test.equal(users[0].passwd, 'qwertysalt');
                     User.create({passwd: 'asalat'}, function (err, usr) {
