@@ -50,7 +50,7 @@ getIndexes = (model, cb) ->
         else
             indexes = {}
             res.forEach (index) ->
-              indexes[index.Key_name] = index if index.Seq_in_index == '1'
+              indexes[index.Key_name] = index if Number(index.Seq_in_index) == 1
             cb err, indexes
 
 it 'should run migration', (test) ->
